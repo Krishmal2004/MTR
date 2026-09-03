@@ -64,18 +64,35 @@ impl FileBrowser {
         browser
     }
 
+    /// Returns true only when there is a real parent directory to go up to.
+    /// On Windows, C:\ (Prefix + RootDir = 2 components) is treated as root — no back.
+    /// On Unix, / (RootDir = 1 component) is treated as root — no back.
+    fn can_go_back(&self) -> bool {
+        use std::path::Component;
+        let count = self.current_dir.components().count();
+        let comps: Vec<_> = self.current_dir.components().collect();
+        // Windows drive root: [Prefix("C:"), RootDir]  → count == 2
+        // Unix fs root:       [RootDir]                → count == 1
+        let has_prefix = comps.first()
+            .map(|c| matches!(c, Component::Prefix(_)))
+            .unwrap_or(false);
+        if has_prefix {
+            count > 2  // Windows: need more than Prefix + RootDir
+        } else {
+            count > 1  // Unix: need more than just RootDir
+        }
+    }
+
     fn refresh(&mut self) {
         self.entries.clear();
 
-        // Add a clearly-labelled "Back" entry whenever we are not at a drive root
-        if let Some(parent) = self.current_dir.parent() {
-            if parent != Path::new("") {
-                self.entries.push(Entry {
-                    name: "🔙 Back  (← go up one folder)".to_string(),
-                    is_dir: true,
-                    is_parent: true,
-                });
-            }
+        // Show the Back entry only when there is a real parent (not at drive root)
+        if self.can_go_back() {
+            self.entries.push(Entry {
+                name: "🔙 Back  (go up one folder)".to_string(),
+                is_dir: true,
+                is_parent: true,
+            });
         }
 
         let mut dirs: Vec<Entry> = vec![];
@@ -113,9 +130,11 @@ impl FileBrowser {
         if let Some(entry) = self.selected_entry() {
             if entry.is_dir {
                 let new_path = if entry.is_parent {
-                    match self.current_dir.parent() {
-                        Some(p) if p != Path::new("") => p.to_path_buf(),
-                        _ => self.current_dir.clone(),
+                    // Only go up if we actually can
+                    if self.can_go_back() {
+                        self.current_dir.parent().unwrap().to_path_buf()
+                    } else {
+                        self.current_dir.clone()
                     }
                 } else {
                     let name = entry.name.trim_end_matches('/');
@@ -395,14 +414,13 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
                         KeyCode::Up => browser.move_up(),
                         KeyCode::Down => browser.move_down(),
                         KeyCode::Enter => browser.navigate_into_selected(),
-                        // Backspace = go up one folder (back)
+                        // Backspace = go up one folder, but NEVER past drive root
                         KeyCode::Backspace => {
-                            if let Some(parent) = browser.current_dir.parent() {
-                                if parent != Path::new("") {
-                                    browser.current_dir = parent.to_path_buf();
-                                    browser.refresh();
-                                    browser.error_msg = None;
-                                }
+                            if browser.can_go_back() {
+                                browser.current_dir =
+                                    browser.current_dir.parent().unwrap().to_path_buf();
+                                browser.refresh();
+                                browser.error_msg = None;
                             }
                         }
                         KeyCode::Char(' ') => {
