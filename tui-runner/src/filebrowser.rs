@@ -1,11 +1,11 @@
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+﻿use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 use ratatui::Terminal;
 use std::fs;
 use std::io;
@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 enum InputMode {
     Normal,
     CreatingFolder,
+    ChoosingDrive,
 }
 
 struct FileBrowser {
@@ -24,6 +25,8 @@ struct FileBrowser {
     mode: InputMode,
     input_buf: String,
     error_msg: Option<String>,
+    drives: Vec<String>,
+    drive_state: ListState,
 }
 
 struct Entry {
@@ -32,8 +35,21 @@ struct Entry {
     is_parent: bool,
 }
 
+/// Detect available Windows drive letters by probing A..Z
+fn list_drives() -> Vec<String> {
+    let mut drives = Vec::new();
+    for letter in b'A'..=b'Z' {
+        let drive = format!("{}:\\", letter as char);
+        if Path::new(&drive).exists() {
+            drives.push(drive);
+        }
+    }
+    drives
+}
+
 impl FileBrowser {
     fn new(start: &Path) -> Self {
+        let drives = list_drives();
         let mut browser = Self {
             current_dir: start.to_path_buf(),
             entries: vec![],
@@ -41,6 +57,8 @@ impl FileBrowser {
             mode: InputMode::Normal,
             input_buf: String::new(),
             error_msg: None,
+            drives,
+            drive_state: ListState::default(),
         };
         browser.refresh();
         browser
@@ -49,16 +67,17 @@ impl FileBrowser {
     fn refresh(&mut self) {
         self.entries.clear();
 
-        // Add parent ".." entry if we are not at root
-        if self.current_dir.parent().is_some() {
-            self.entries.push(Entry {
-                name: "../".to_string(),
-                is_dir: true,
-                is_parent: true,
-            });
+        // Add parent ".." entry if we are not at a drive root
+        if let Some(parent) = self.current_dir.parent() {
+            if parent != Path::new("") {
+                self.entries.push(Entry {
+                    name: "../".to_string(),
+                    is_dir: true,
+                    is_parent: true,
+                });
+            }
         }
 
-        // Read directory contents, show dirs first then files
         let mut dirs: Vec<Entry> = vec![];
         let mut files: Vec<Entry> = vec![];
 
@@ -79,7 +98,6 @@ impl FileBrowser {
         self.entries.extend(dirs);
         self.entries.extend(files);
 
-        // Reset selection to first item
         if self.entries.is_empty() {
             self.list_state.select(None);
         } else {
@@ -95,9 +113,11 @@ impl FileBrowser {
         if let Some(entry) = self.selected_entry() {
             if entry.is_dir {
                 let new_path = if entry.is_parent {
-                    self.current_dir.parent().unwrap().to_path_buf()
+                    match self.current_dir.parent() {
+                        Some(p) if p != Path::new("") => p.to_path_buf(),
+                        _ => self.current_dir.clone(),
+                    }
                 } else {
-                    // Strip trailing slash added for display
                     let name = entry.name.trim_end_matches('/');
                     self.current_dir.join(name)
                 };
@@ -112,6 +132,8 @@ impl FileBrowser {
         let name = self.input_buf.trim().to_string();
         if name.is_empty() {
             self.error_msg = Some("Folder name cannot be empty.".to_string());
+            self.mode = InputMode::Normal;
+            self.input_buf.clear();
             return;
         }
         let new_path = self.current_dir.join(&name);
@@ -131,6 +153,18 @@ impl FileBrowser {
         }
     }
 
+    fn switch_to_drive(&mut self, drive: String) {
+        let path = PathBuf::from(&drive);
+        if path.exists() {
+            self.current_dir = path;
+            self.refresh();
+            self.error_msg = None;
+        } else {
+            self.error_msg = Some(format!("Drive {} is not accessible.", drive));
+        }
+        self.mode = InputMode::Normal;
+    }
+
     fn move_up(&mut self) {
         if self.entries.is_empty() { return; }
         let i = self.list_state.selected().unwrap_or(0);
@@ -144,10 +178,22 @@ impl FileBrowser {
         let new_i = (i + 1) % self.entries.len();
         self.list_state.select(Some(new_i));
     }
+
+    fn drive_move_up(&mut self) {
+        if self.drives.is_empty() { return; }
+        let i = self.drive_state.selected().unwrap_or(0);
+        let new_i = if i == 0 { self.drives.len() - 1 } else { i - 1 };
+        self.drive_state.select(Some(new_i));
+    }
+
+    fn drive_move_down(&mut self) {
+        if self.drives.is_empty() { return; }
+        let i = self.drive_state.selected().unwrap_or(0);
+        let new_i = (i + 1) % self.drives.len();
+        self.drive_state.select(Some(new_i));
+    }
 }
 
-/// Launch the interactive folder browser. Returns `Some(path)` when the user
-/// confirms a directory, or `None` if they cancel (Esc / Ctrl+C).
 pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
     enable_raw_mode().ok()?;
     let mut stdout = io::stdout();
@@ -156,6 +202,16 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
     let mut terminal = Terminal::new(backend).ok()?;
 
     let mut browser = FileBrowser::new(start);
+    // Pre-select the current drive in the drive picker
+    let current_drive = start.to_string_lossy()
+        .chars().take(3).collect::<String>()
+        .to_uppercase();
+    if let Some(idx) = browser.drives.iter().position(|d| d.to_uppercase() == current_drive) {
+        browser.drive_state.select(Some(idx));
+    } else {
+        browser.drive_state.select(Some(0));
+    }
+
     let result: Option<PathBuf>;
 
     loop {
@@ -165,26 +221,26 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),  // title
+                    Constraint::Length(3),  // title bar
                     Constraint::Min(1),     // file list
-                    Constraint::Length(3),  // input / status bar
-                    Constraint::Length(1),  // key hint bar
+                    Constraint::Length(3),  // status / input
+                    Constraint::Length(1),  // key hints
                 ])
                 .split(size);
 
-            // ── Title ──
+            // ── Title bar ──
             let current_dir_str = browser.current_dir.to_string_lossy().to_string();
             let title = Paragraph::new(Line::from(vec![
-                Span::styled(" 📁 SELECT WORKING DIRECTORY ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::raw("  "),
                 Span::styled(
-                    current_dir_str,
-                    Style::default().fg(Color::Yellow),
+                    " 📁 SELECT WORKING DIRECTORY ",
+                    Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
                 ),
+                Span::raw("  "),
+                Span::styled(current_dir_str, Style::default().fg(Color::Yellow)),
             ]))
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+            .block(Block::default().borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)));
             f.render_widget(title, chunks[0]);
-
 
             // ── File list ──
             let items: Vec<ListItem> = browser.entries.iter().map(|e| {
@@ -192,72 +248,119 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
                 let style = if e.is_dir {
                     Style::default().fg(Color::Cyan)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Gray)
                 };
-                ListItem::new(Line::from(Span::styled(
-                    format!("{}{}", icon, e.name),
-                    style,
-                )))
+                ListItem::new(Line::from(Span::styled(format!("{}{}", icon, e.name), style)))
             }).collect();
 
             let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title(" Files & Folders ").border_style(Style::default().fg(Color::Cyan)))
+                .block(Block::default().borders(Borders::ALL)
+                    .title(" Files & Folders ")
+                    .border_style(Style::default().fg(Color::Cyan)))
                 .highlight_style(
-                    Style::default().bg(Color::DarkGray).fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)
                 )
                 .highlight_symbol("▶ ");
 
             f.render_stateful_widget(list, chunks[1], &mut browser.list_state);
 
-            // ── Input / status bar ──
-            let status_text = if browser.mode == InputMode::CreatingFolder {
-                format!(" New folder name: {}█", browser.input_buf)
+            // ── Status / input bar ──
+            let (status_text, status_style) = if browser.mode == InputMode::CreatingFolder {
+                (
+                    format!(" 📝 New folder name: {}_", browser.input_buf),
+                    Style::default().fg(Color::Black).bg(Color::Green),
+                )
             } else if let Some(ref err) = browser.error_msg {
-                format!(" ⚠  {}", err)
+                (
+                    format!(" ⚠  {}", err),
+                    Style::default().fg(Color::White).bg(Color::Red),
+                )
             } else {
                 let selected_path = browser.list_state.selected()
                     .and_then(|i| browser.entries.get(i))
                     .map(|e| {
                         if e.is_parent {
                             browser.current_dir.parent()
+                                .filter(|p| *p != Path::new(""))
                                 .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or_default()
+                                .unwrap_or_else(|| browser.current_dir.to_string_lossy().to_string())
                         } else {
                             let name = e.name.trim_end_matches('/');
                             browser.current_dir.join(name).to_string_lossy().to_string()
                         }
                     })
                     .unwrap_or_else(|| browser.current_dir.to_string_lossy().to_string());
-                format!(" Selected: {}", selected_path)
-            };
-
-            let status_style = if browser.mode == InputMode::CreatingFolder {
-                Style::default().fg(Color::Black).bg(Color::Green)
-            } else if browser.error_msg.is_some() {
-                Style::default().fg(Color::Black).bg(Color::Red)
-            } else {
-                Style::default().fg(Color::White).bg(Color::DarkGray)
+                (
+                    format!(" 📌 Path: {}", selected_path),
+                    Style::default().fg(Color::White).bg(Color::DarkGray),
+                )
             };
 
             let status_par = Paragraph::new(status_text)
                 .style(status_style)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+                .block(Block::default().borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(status_par, chunks[2]);
 
             // ── Key hint bar ──
-            let hint = if browser.mode == InputMode::CreatingFolder {
-                " Enter=create folder   Esc=cancel"
-            } else {
-                " ↑/↓=navigate   Enter=open folder   Space=use this dir   n=new folder   Esc=cancel"
+            let hint = match browser.mode {
+                InputMode::CreatingFolder =>
+                    " Enter=create   Esc=cancel",
+                InputMode::ChoosingDrive =>
+                    " ↑/↓=select drive   Enter=switch   Esc=cancel",
+                InputMode::Normal =>
+                    " ↑/↓=move   Enter=open   Space=confirm   n=new folder   d=drive   Esc=cancel",
             };
             let hint_par = Paragraph::new(hint)
                 .style(Style::default().fg(Color::White).bg(Color::Blue));
             f.render_widget(hint_par, chunks[3]);
+
+            // ── Drive picker popup (overlay) ──
+            if browser.mode == InputMode::ChoosingDrive && !browser.drives.is_empty() {
+                let popup_width = 20u16;
+                let popup_height = (browser.drives.len() as u16 + 2).min(size.height.saturating_sub(4));
+                let popup_x = size.width.saturating_sub(popup_width + 2);
+                let popup_y = 3u16;
+                let popup_area = ratatui::layout::Rect {
+                    x: popup_x,
+                    y: popup_y,
+                    width: popup_width,
+                    height: popup_height,
+                };
+
+                f.render_widget(Clear, popup_area);
+
+                let drive_items: Vec<ListItem> = browser.drives.iter().map(|d| {
+                    ListItem::new(Line::from(Span::styled(
+                        format!("  💾 {}", d),
+                        Style::default().fg(Color::Yellow),
+                    )))
+                }).collect();
+
+                let drive_list = List::new(drive_items)
+                    .block(Block::default().borders(Borders::ALL)
+                        .title(" Drives ")
+                        .border_style(Style::default().fg(Color::Yellow)))
+                    .highlight_style(
+                        Style::default().bg(Color::Yellow).fg(Color::Black).add_modifier(Modifier::BOLD)
+                    )
+                    .highlight_symbol("▶ ");
+
+                f.render_stateful_widget(drive_list, popup_area, &mut browser.drive_state);
+            }
         }).ok();
 
         if let Ok(true) = event::poll(std::time::Duration::from_millis(80)) {
             if let Ok(Event::Key(key)) = event::read() {
+                // ── FIX: Only handle key-press events, ignore key-release ──
+                // On Windows, crossterm fires both Press and Release events,
+                // which caused every character to appear twice.
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+
                 match browser.mode {
+                    // ── Folder creation input ──
                     InputMode::CreatingFolder => match key.code {
                         KeyCode::Enter => browser.create_folder(),
                         KeyCode::Esc => {
@@ -269,12 +372,30 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
                         KeyCode::Char(c) => browser.input_buf.push(c),
                         _ => {}
                     },
+
+                    // ── Drive chooser popup ──
+                    InputMode::ChoosingDrive => match key.code {
+                        KeyCode::Up => browser.drive_move_up(),
+                        KeyCode::Down => browser.drive_move_down(),
+                        KeyCode::Enter => {
+                            if let Some(idx) = browser.drive_state.selected() {
+                                if let Some(drive) = browser.drives.get(idx).cloned() {
+                                    browser.switch_to_drive(drive);
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            browser.mode = InputMode::Normal;
+                        }
+                        _ => {}
+                    },
+
+                    // ── Normal navigation ──
                     InputMode::Normal => match key.code {
                         KeyCode::Up => browser.move_up(),
                         KeyCode::Down => browser.move_down(),
                         KeyCode::Enter => browser.navigate_into_selected(),
                         KeyCode::Char(' ') => {
-                            // Confirm current directory
                             result = Some(browser.current_dir.clone());
                             break;
                         }
@@ -282,6 +403,9 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
                             browser.mode = InputMode::CreatingFolder;
                             browser.input_buf.clear();
                             browser.error_msg = None;
+                        }
+                        KeyCode::Char('d') => {
+                            browser.mode = InputMode::ChoosingDrive;
                         }
                         KeyCode::Esc => {
                             result = None;
