@@ -1,6 +1,7 @@
 mod config;
 mod detect;
 mod engine;
+mod filebrowser;
 mod header;
 mod port_cleanup;
 mod ui;
@@ -11,8 +12,13 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let root = env::current_dir()?;
     let force_reconfigure = env::args().any(|a| a == "--reconfigure");
+
+    // Launch the interactive folder browser so the user can navigate to
+    // (or create) a working directory before anything else runs.
+    // Pressing Space confirms the chosen dir; Esc keeps the current dir.
+    let cwd = env::current_dir()?;
+    let root = filebrowser::browse_for_directory(&cwd).unwrap_or(cwd);
 
     let cfg = if force_reconfigure {
         wizard::run_setup_wizard(&root)?
