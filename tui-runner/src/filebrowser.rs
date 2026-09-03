@@ -158,18 +158,25 @@ impl FileBrowser {
         let new_path = self.current_dir.join(&name);
         match fs::create_dir_all(&new_path) {
             Ok(_) => {
-                self.current_dir = new_path;
+                // Stay in the current directory so the new folder is visible in the list
                 self.input_buf.clear();
                 self.mode = InputMode::Normal;
-                self.error_msg = None;
+                self.error_msg = Some(format!("✅ Folder \"{}\" created!", name));
                 self.refresh();
+                // Auto-select the newly created folder in the list
+                if let Some(idx) = self.entries.iter().position(|e| {
+                    e.name.trim_end_matches('/') == name
+                }) {
+                    self.list_state.select(Some(idx));
+                }
             }
             Err(e) => {
-                self.error_msg = Some(format!("Error: {}", e));
+                self.error_msg = Some(format!("❌ Error: {}", e));
                 self.input_buf.clear();
                 self.mode = InputMode::Normal;
             }
         }
+
     }
 
     fn switch_to_drive(&mut self, drive: String) {
