@@ -1,0 +1,58 @@
+{
+  "title": "TUI-RUNNER",
+  "processes": [
+    {
+      "name": "backend",
+      "type": "simple",
+      "cmd": "dotnet",
+      "args": ["run"],
+      "cwd": "backend/src",
+      "color": "green",
+      "port": 5119,
+      "readyWhen": {
+        "type": "regex",
+        "pattern": "Now listening on",
+        "flags": "i"
+      }
+    },
+    {
+      "name": "web",
+      "type": "simple",
+      "cmd": "npm",
+      "args": ["run", "dev"],
+      "cwd": "web",
+      "color": "cyan",
+      "port": 5173,
+      "dependsOn": ["backend"]
+    },
+    {
+      "name": "mobile",
+      "type": "multistep",
+      "cwd": "mobile",
+      "color": "magenta",
+      "vars": { "emulatorId": "Pixel_5_API_31" },
+      "steps": [
+        {
+          "cmd": "flutter",
+          "args": ["emulators", "--launch", "{emulatorId}"],
+          "readyWhen": {
+            "type": "poll",
+            "command": "flutter",
+            "args": ["devices", "--machine"],
+            "timeoutMs": 90000,
+            "intervalMs": 2000,
+            "matchField": "emulatorId",
+            "matchValue": "{emulatorId}",
+            "fallbackMatch": { "field": "emulator", "value": true },
+            "captureField": "id",
+            "captureAs": "deviceId"
+          }
+        },
+        {
+          "cmd": "flutter",
+          "args": ["run", "-d", "{deviceId}"]
+        }
+      ]
+    }
+  ]
+}
