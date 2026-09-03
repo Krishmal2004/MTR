@@ -16,9 +16,15 @@ async fn main() -> anyhow::Result<()> {
 
     // Launch the interactive folder browser so the user can navigate to
     // (or create) a working directory before anything else runs.
-    // Pressing Space confirms the chosen dir; Esc keeps the current dir.
+    // Pressing Space confirms the chosen dir; Esc exits the program cleanly.
     let cwd = env::current_dir()?;
-    let root = filebrowser::browse_for_directory(&cwd).unwrap_or(cwd);
+    let root = match filebrowser::browse_for_directory(&cwd) {
+        Some(path) => path,
+        None => {
+            println!("No directory selected. Exiting.");
+            return Ok(());
+        }
+    };
 
     let cfg = if force_reconfigure {
         wizard::run_setup_wizard(&root)?

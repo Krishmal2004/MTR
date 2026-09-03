@@ -1,4 +1,4 @@
-﻿use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::CrosstermBackend;
@@ -67,11 +67,11 @@ impl FileBrowser {
     fn refresh(&mut self) {
         self.entries.clear();
 
-        // Add parent ".." entry if we are not at a drive root
+        // Add a clearly-labelled "Back" entry whenever we are not at a drive root
         if let Some(parent) = self.current_dir.parent() {
             if parent != Path::new("") {
                 self.entries.push(Entry {
-                    name: "../".to_string(),
+                    name: "🔙 Back  (← go up one folder)".to_string(),
                     is_dir: true,
                     is_parent: true,
                 });
@@ -309,7 +309,7 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
                 InputMode::ChoosingDrive =>
                     " ↑/↓=select drive   Enter=switch   Esc=cancel",
                 InputMode::Normal =>
-                    " ↑/↓=move   Enter=open   Space=confirm   n=new folder   d=drive   Esc=cancel",
+                    " ↑/↓=move   Enter=open   Backspace=back   Space=confirm   n=new folder   d=drive   Esc=quit",
             };
             let hint_par = Paragraph::new(hint)
                 .style(Style::default().fg(Color::White).bg(Color::Blue));
@@ -395,6 +395,16 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
                         KeyCode::Up => browser.move_up(),
                         KeyCode::Down => browser.move_down(),
                         KeyCode::Enter => browser.navigate_into_selected(),
+                        // Backspace = go up one folder (back)
+                        KeyCode::Backspace => {
+                            if let Some(parent) = browser.current_dir.parent() {
+                                if parent != Path::new("") {
+                                    browser.current_dir = parent.to_path_buf();
+                                    browser.refresh();
+                                    browser.error_msg = None;
+                                }
+                            }
+                        }
                         KeyCode::Char(' ') => {
                             result = Some(browser.current_dir.clone());
                             break;
