@@ -23,8 +23,6 @@ pub struct LogEvent {
     pub line: String,
 }
 
-/// A handle the UI layer can use to kill a process, regardless of whether
-/// it has actually spawned yet (it may still be waiting on `dependsOn`).
 pub struct ProcHandle {
     pub kill_tx: watch::Sender<bool>,
     pub pid: Arc<Mutex<Option<u32>>>,
@@ -107,8 +105,6 @@ fn pipe_output(child: &mut Child, pane: usize, tx: mpsc::UnboundedSender<LogEven
     }
 }
 
-/// Waits for a `readyWhen` condition. `line_rx` (if given) receives lines
-/// from the currently running step, used for the `regex` variant.
 async fn wait_for_ready(
     ready_when: &Option<ReadyWhen>,
     vars: &HashMap<String, String>,
@@ -143,7 +139,6 @@ async fn wait_for_ready(
             let interval = Duration::from_millis(interval_ms.unwrap_or(1000));
             let deadline = Instant::now() + timeout;
             let target = subst(url, vars);
-            // Lightweight readiness check: TCP-connect to host:port from the URL.
             let addr = target
                 .trim_start_matches("http://")
                 .trim_start_matches("https://")
@@ -369,8 +364,6 @@ async fn run_multistep(
         } else {
             let captured = wait_for_ready(&step.ready_when, &vars, &cwd, pane, &tx, regex_line_rx).await;
             vars.extend(captured);
-            // Non-final steps (e.g. an emulator launcher) are left running;
-            // we don't block on their exit before moving to the next step.
         }
     }
     if step_count == 0 {
@@ -408,8 +401,6 @@ fn tap_output_for_regex(
     }
 }
 
-/// Spawns every process, respecting `dependsOn`. Returns handles in the
-/// same order as `processes` so the UI can kill everything on quit.
 pub fn run_engine(
     processes: Vec<ProcessConfig>,
     root: PathBuf,

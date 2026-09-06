@@ -67,7 +67,6 @@ pub async fn run_ui(
     let header_height = header.len() as u16 + 2;
 
     let result = loop {
-        // Drain any pending log events without blocking the redraw loop.
         while let Ok(ev) = rx.try_recv() {
             if let Some(pane) = panes.get_mut(ev.pane) {
                 let style = match ev.kind {
@@ -176,7 +175,6 @@ pub async fn run_ui(
     for handle in &handles {
         handle.kill().await;
     }
-    // Give processes a brief moment to exit cleanly.
     tokio::time::sleep(Duration::from_millis(500)).await;
     println!("Done. All processes stopped.");
 
