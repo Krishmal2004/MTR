@@ -153,5 +153,6 @@ mod tests {
         assert_eq!(mobile.steps.len(), 2);
         let web = cfg.processes.iter().find(|p| p.name == "web").unwrap();
         assert_eq!(web.depends_on, vec!["backend".to_string()]);
+        
     }
 }
