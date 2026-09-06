@@ -10,11 +10,9 @@ const IGNORE_DIRS: &[&str] = &[
 #[derive(Debug, Clone)]
 pub struct Candidate {
     pub suggested_name: String,
-    /// "simple" | "multistep-mobile"
     pub kind: String,
     pub cmd: Option<String>,
     pub args: Vec<String>,
-    /// relative to the scan root
     pub cwd: String,
     pub language: String,
     pub notes: String,

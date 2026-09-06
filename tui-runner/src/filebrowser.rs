@@ -35,7 +35,6 @@ struct Entry {
     is_parent: bool,
 }
 
-/// Detect available Windows drive letters by probing A..Z
 fn list_drives() -> Vec<String> {
     let mut drives = Vec::new();
     for letter in b'A'..=b'Z' {
@@ -64,29 +63,23 @@ impl FileBrowser {
         browser
     }
 
-    /// Returns true only when there is a real parent directory to go up to.
-    /// On Windows, C:\ (Prefix + RootDir = 2 components) is treated as root — no back.
-    /// On Unix, / (RootDir = 1 component) is treated as root — no back.
     fn can_go_back(&self) -> bool {
         use std::path::Component;
         let count = self.current_dir.components().count();
         let comps: Vec<_> = self.current_dir.components().collect();
-        // Windows drive root: [Prefix("C:"), RootDir]  → count == 2
-        // Unix fs root:       [RootDir]                → count == 1
         let has_prefix = comps.first()
             .map(|c| matches!(c, Component::Prefix(_)))
             .unwrap_or(false);
         if has_prefix {
-            count > 2  // Windows: need more than Prefix + RootDir
+            count > 2  
         } else {
-            count > 1  // Unix: need more than just RootDir
+            count > 1  
         }
     }
 
     fn refresh(&mut self) {
         self.entries.clear();
 
-        // Show the Back entry only when there is a real parent (not at drive root)
         if self.can_go_back() {
             self.entries.push(Entry {
                 name: "🔙 Back  (go up one folder)".to_string(),
@@ -158,12 +151,10 @@ impl FileBrowser {
         let new_path = self.current_dir.join(&name);
         match fs::create_dir_all(&new_path) {
             Ok(_) => {
-                // Stay in the current directory so the new folder is visible in the list
                 self.input_buf.clear();
                 self.mode = InputMode::Normal;
                 self.error_msg = Some(format!("✅ Folder \"{}\" created!", name));
                 self.refresh();
-                // Auto-select the newly created folder in the list
                 if let Some(idx) = self.entries.iter().position(|e| {
                     e.name.trim_end_matches('/') == name
                 }) {
@@ -247,10 +238,10 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),  // title bar
-                    Constraint::Min(1),     // file list
-                    Constraint::Length(3),  // status / input
-                    Constraint::Length(1),  // key hints
+                    Constraint::Length(3),  
+                    Constraint::Min(1),    
+                    Constraint::Length(3),  
+                    Constraint::Length(1),  
                 ])
                 .split(size);
 
@@ -378,9 +369,6 @@ pub fn browse_for_directory(start: &Path) -> Option<PathBuf> {
 
         if let Ok(true) = event::poll(std::time::Duration::from_millis(80)) {
             if let Ok(Event::Key(key)) = event::read() {
-                // ── FIX: Only handle key-press events, ignore key-release ──
-                // On Windows, crossterm fires both Press and Release events,
-                // which caused every character to appear twice.
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
