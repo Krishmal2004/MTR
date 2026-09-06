@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows Binary
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Release Binary
+        # Build without specifying a target — uses the default windows-msvc host.
+        # This produces a self-contained exe that works on any x64 Windows 10/11 machine.
+        run: cargo build --release
+        working-directory: tui-runner
+
+      - name: Copy binary to root
+        run: Copy-Item "tui-runner\target\release\tui-runner.exe" "tui-runner.exe"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tui-runner.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
