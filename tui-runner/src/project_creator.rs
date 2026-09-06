@@ -13,12 +13,18 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Framework definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
 pub struct Framework {
     pub icon: &'static str,
     pub name: &'static str,
     pub description: &'static str,
     pub language: &'static str,
+    /// The primary CLI tool required (used for installation detection).
     pub cmd: &'static str,
+    /// Args passed to `cmd`. `{name}` is replaced with the project name.
     pub args: &'static [&'static str],
 }
 
@@ -106,17 +112,68 @@ pub const FRAMEWORKS: &[Framework] = &[
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Installation detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Returns true if `cmd` is on the system PATH and responds to `--version`.
+fn is_installed(cmd: &str) -> bool {
+    std::process::Command::new(cmd)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok()
+}
+
+/// Return only the frameworks whose required tool is installed on this machine.
+/// Yields `(original_index, &Framework)` so we can map back to FRAMEWORKS later.
+/// `npx` shares the npm binary — we check `npm` for both.
+pub fn available_frameworks() -> Vec<(usize, &'static Framework)> {
+    FRAMEWORKS
+        .iter()
+        .enumerate()
+        .filter(|(_, fw)| {
+            let check = if fw.cmd == "npx" { "npm" } else { fw.cmd };
+            is_installed(check)
+        })
+        .collect()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Framework picker TUI
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Show the framework picker.
-/// Returns the chosen framework index, or `None` if the user pressed Esc/quit.
+/// Only frameworks whose CLI tool is **installed** are shown.
+/// Returns the chosen `FRAMEWORKS` index, or `None` if cancelled.
 pub fn select_framework() -> Option<usize> {
     enable_raw_mode().ok()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen).ok()?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).ok()?;
+
+    // ── Detect installed frameworks ──────────────────────────────────────────
+    let available = available_frameworks();
+
+    // If nothing is installed, exit gracefully before drawing anything.
+    if available.is_empty() {
+        disable_raw_mode().ok();
+        execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
+        println!();
+        println!("  No supported frameworks detected on this machine.");
+        println!("  Install one or more of the following tools first:");
+        println!("    npm / node   → React, Next.js, Vue, Angular, SvelteKit, Node.js");
+        println!("    flutter      → Flutter");
+        println!("    cargo        → Rust");
+        println!("    dotnet       → .NET Web API");
+        println!("    python       → Python");
+        println!();
+        println!("  Press Enter to go back...");
+        let mut buf = String::new();
+        std::io::stdin().read_line(&mut buf).ok();
+        return None;
+    }
 
     let mut list_state = ListState::default();
     list_state.select(Some(0));
@@ -131,13 +188,18 @@ pub fn select_framework() -> Option<usize> {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
-                        Constraint::Length(3), 
-                        Constraint::Min(1),    
-                        Constraint::Length(4), 
-                        Constraint::Length(1), 
+                        Constraint::Length(3), // title
+                        Constraint::Min(1),    // framework list
+                        Constraint::Length(4), // detail panel
+                        Constraint::Length(1), // hint bar
                     ])
                     .split(size);
 
+                // ── Title ──────────────────────────────────────────────────
+                let detected_count = format!(
+                    "  {} framework(s) detected on your PC",
+                    available.len()
+                );
                 let title = Paragraph::new(Line::from(vec![
                     Span::styled(
                         " 🚀 CREATE NEW PROJECT ",
@@ -146,9 +208,8 @@ pub fn select_framework() -> Option<usize> {
                             .bg(Color::Green)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::raw("  "),
                     Span::styled(
-                        "Choose a framework to scaffold",
+                        detected_count,
                         Style::default().fg(Color::Green),
                     ),
                 ]))
@@ -159,15 +220,13 @@ pub fn select_framework() -> Option<usize> {
                 );
                 f.render_widget(title, chunks[0]);
 
-                let list_items: Vec<ListItem> = FRAMEWORKS
+                // ── Installed-only framework list ──────────────────────────
+                let list_items: Vec<ListItem> = available
                     .iter()
-                    .map(|fw| {
+                    .map(|(_, fw)| {
                         ListItem::new(Line::from(vec![
                             Span::raw("  "),
-                            Span::styled(
-                                fw.icon,
-                                Style::default().fg(Color::Cyan),
-                            ),
+                            Span::styled(fw.icon, Style::default().fg(Color::Cyan)),
                             Span::raw(" "),
                             Span::styled(
                                 fw.name,
@@ -188,7 +247,7 @@ pub fn select_framework() -> Option<usize> {
                     .block(
                         Block::default()
                             .borders(Borders::ALL)
-                            .title(" Frameworks ")
+                            .title(" Installed Frameworks ")
                             .border_style(Style::default().fg(Color::Cyan)),
                     )
                     .highlight_style(
@@ -201,8 +260,9 @@ pub fn select_framework() -> Option<usize> {
 
                 f.render_stateful_widget(list, chunks[1], &mut list_state);
 
-                let detail_text = if let Some(i) = list_state.selected() {
-                    if let Some(fw) = FRAMEWORKS.get(i) {
+                // ── Detail panel for highlighted framework ─────────────────
+                let detail_lines = if let Some(sel) = list_state.selected() {
+                    if let Some((_, fw)) = available.get(sel) {
                         vec![
                             Line::from(vec![
                                 Span::raw("  "),
@@ -235,7 +295,7 @@ pub fn select_framework() -> Option<usize> {
                     vec![]
                 };
 
-                let detail = Paragraph::new(detail_text).block(
+                let detail = Paragraph::new(detail_lines).block(
                     Block::default()
                         .borders(Borders::ALL)
                         .title(" Details ")
@@ -243,8 +303,9 @@ pub fn select_framework() -> Option<usize> {
                 );
                 f.render_widget(detail, chunks[2]);
 
+                // ── Hint bar ───────────────────────────────────────────────
                 let hint = Paragraph::new(
-                    " ↑/↓=select   Enter=choose framework   Esc=back to home",
+                    " ↑/↓=select   Enter=choose   Esc=back to home",
                 )
                 .style(Style::default().fg(Color::White).bg(Color::Blue));
                 f.render_widget(hint, chunks[3]);
@@ -260,15 +321,19 @@ pub fn select_framework() -> Option<usize> {
                     KeyCode::Up => {
                         let i = list_state.selected().unwrap_or(0);
                         list_state.select(Some(
-                            if i == 0 { FRAMEWORKS.len() - 1 } else { i - 1 },
+                            if i == 0 { available.len() - 1 } else { i - 1 },
                         ));
                     }
                     KeyCode::Down => {
                         let i = list_state.selected().unwrap_or(0);
-                        list_state.select(Some((i + 1) % FRAMEWORKS.len()));
+                        list_state.select(Some((i + 1) % available.len()));
                     }
                     KeyCode::Enter => {
-                        result = list_state.selected();
+                        // Return the *original* FRAMEWORKS index, not the filtered index
+                        result = list_state
+                            .selected()
+                            .and_then(|i| available.get(i))
+                            .map(|(orig_idx, _)| *orig_idx);
                         break;
                     }
                     KeyCode::Esc => {
@@ -294,6 +359,15 @@ pub fn select_framework() -> Option<usize> {
     result
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Scaffold runner
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Run the framework scaffold command.
+///
+/// `project_path` is the full path where the new project should live.
+/// The scaffold command runs in the **parent** directory so the framework CLI
+/// creates the project folder itself.
 pub fn scaffold_project(framework_idx: usize, project_path: &PathBuf) -> anyhow::Result<()> {
     let fw = &FRAMEWORKS[framework_idx];
 
@@ -332,7 +406,7 @@ pub fn scaffold_project(framework_idx: usize, project_path: &PathBuf) -> anyhow:
     } else {
         println!();
         println!("  Scaffold exited with code {:?}", status.code());
-        println!("  Make sure the required tool ({}) is installed.", fw.cmd);
+        println!("  Make sure '{}' is installed and on PATH.", fw.cmd);
     }
 
     println!();
