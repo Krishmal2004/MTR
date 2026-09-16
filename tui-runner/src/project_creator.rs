@@ -20,15 +20,9 @@ pub struct Framework {
     pub language: &'static str,
     pub cmd: &'static str,
     pub args: &'static [&'static str],
-    /// true  = the command creates a brand-new "{name}" subfolder itself (run from the
-    ///         parent of the folder you picked) — used only where the underlying CLI has
-    ///         no flat/in-place mode.
-    /// false = the folder you picked is created if needed, and the tool initializes
-    ///         directly inside it — no extra nested subfolder.
+
     pub create_own_dir: bool,
-    /// An extra command run in the project folder right after scaffolding, to pull down
-    /// dependencies for scaffolders that don't already install them on their own
-    /// (e.g. `npm install`). None when the scaffold command already handles it.
+
     pub install_cmd: Option<(&'static str, &'static [&'static str])>,
 }
 

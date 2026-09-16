@@ -14,17 +14,28 @@ fn kill_port_unix(port: u16) {
 }
 
 fn kill_port_windows(port: u16) {
-    let output = match Command::new("cmd").args(["/C", &format!("netstat -ano | findstr :{}", port)]).output() {
+
+    let output = match Command::new("netstat").args(["-ano"]).output() {
         Ok(o) => o,
         Err(_) => return,
     };
+    let needle = format!(":{}", port);
     let text = String::from_utf8_lossy(&output.stdout);
     for line in text.lines() {
+        if !line.contains("LISTENING") {
+            continue;
+        }
+        let mut fields = line.split_whitespace();
+        let local_addr = match fields.next() {
+            Some(a) => a,
+            None => continue,
+        };
+        if !local_addr.ends_with(&needle) {
+            continue;
+        }
         if let Some(pid) = line.split_whitespace().last() {
-            if line.contains("LISTENING") {
-                if Command::new("taskkill").args(["/PID", pid, "/F"]).status().is_ok() {
-                    println!("Freed port {} (killed stale PID {})", port, pid);
-                }
+            if Command::new("taskkill").args(["/PID", pid, "/F"]).status().is_ok() {
+                println!("Freed port {} (killed stale PID {})", port, pid);
             }
         }
     }
