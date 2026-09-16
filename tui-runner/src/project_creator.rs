@@ -20,151 +20,173 @@ pub struct Framework {
     pub language: &'static str,
     pub cmd: &'static str,
     pub args: &'static [&'static str],
-    /// true  = the command itself creates the "{name}" subfolder (run from the parent dir)
-    /// false = the target folder is created first, and the command runs inside it
+    /// true  = the command creates a brand-new "{name}" subfolder itself (run from the
+    ///         parent of the folder you picked) — used only where the underlying CLI has
+    ///         no flat/in-place mode.
+    /// false = the folder you picked is created if needed, and the tool initializes
+    ///         directly inside it — no extra nested subfolder.
     pub create_own_dir: bool,
+    /// An extra command run in the project folder right after scaffolding, to pull down
+    /// dependencies for scaffolders that don't already install them on their own
+    /// (e.g. `npm install`). None when the scaffold command already handles it.
+    pub install_cmd: Option<(&'static str, &'static [&'static str])>,
 }
 
 pub const FRAMEWORKS: &[Framework] = &[
     Framework {
         icon: "⚛ ",
         name: "React  (Vite)",
-        description: "Fast React SPA with Vite bundler",
+        description: "Fast React SPA with Vite, initialized in the folder you pick",
         language: "JavaScript / TypeScript",
         cmd: "npm",
-        args: &["create", "vite@latest", "{name}", "--", "--template", "react"],
-        create_own_dir: true,
+        args: &["create", "vite@latest", ".", "--", "--template", "react"],
+        create_own_dir: false,
+        install_cmd: Some(("npm", &["install"])),
     },
     Framework {
         icon: "▲ ",
         name: "Next.js",
-        description: "Full-stack React framework with SSR/SSG",
+        description: "Full-stack React framework, initialized in the folder you pick",
         language: "JavaScript / TypeScript",
         cmd: "npx",
-        args: &["create-next-app@latest", "{name}", "--yes"],
-        create_own_dir: true,
+        args: &["create-next-app@latest", ".", "--yes"],
+        create_own_dir: false,
+        install_cmd: None, // create-next-app installs deps itself
     },
     Framework {
         icon: "◈ ",
         name: "Vue 3  (Vite)",
-        description: "Progressive JavaScript framework",
+        description: "Progressive JS framework, initialized in the folder you pick",
         language: "JavaScript / TypeScript",
         cmd: "npm",
-        args: &["create", "vite@latest", "{name}", "--", "--template", "vue"],
-        create_own_dir: true,
+        args: &["create", "vite@latest", ".", "--", "--template", "vue"],
+        create_own_dir: false,
+        install_cmd: Some(("npm", &["install"])),
     },
     Framework {
         icon: "A ",
         name: "Angular",
-        description: "Enterprise-grade Angular application",
+        description: "Enterprise-grade Angular app, initialized in the folder you pick",
         language: "TypeScript",
         cmd: "npx",
-        args: &["-p", "@angular/cli", "ng", "new", "{name}", "--defaults"],
-        create_own_dir: true,
+        args: &["-p", "@angular/cli", "ng", "new", "{name}", "--directory=.", "--defaults"],
+        create_own_dir: false,
+        install_cmd: None, // ng new installs deps itself
     },
     Framework {
         icon: "S ",
         name: "SvelteKit",
-        description: "Cybernetically enhanced web apps",
+        description: "Cybernetically enhanced web app, initialized in the folder you pick",
         language: "JavaScript / TypeScript",
         cmd: "npm",
-        args: &["create", "svelte@latest", "{name}"],
-        create_own_dir: true,
+        args: &["create", "svelte@latest", "."],
+        create_own_dir: false,
+        install_cmd: Some(("npm", &["install"])),
     },
     Framework {
         icon: "🦕",
         name: "Deno",
-        description: "Secure TypeScript/JavaScript runtime project",
+        description: "Secure TS/JS runtime project, initialized in the folder you pick",
         language: "TypeScript / JavaScript",
         cmd: "deno",
-        args: &["init", "{name}"],
-        create_own_dir: true,
+        args: &["init", "."],
+        create_own_dir: false,
+        install_cmd: None, // Deno resolves remote imports on first run, no node_modules step
     },
     Framework {
         icon: "🥟",
         name: "Bun",
-        description: "Blazing-fast all-in-one JS/TS runtime project",
+        description: "All-in-one JS/TS runtime project, initialized in the folder you pick",
         language: "TypeScript / JavaScript",
         cmd: "bun",
         args: &["init", "-y"],
         create_own_dir: false,
+        install_cmd: Some(("bun", &["install"])),
     },
     Framework {
         icon: "N ",
         name: "Node.js  (Express)",
-        description: "Express REST API server",
+        description: "Express REST API server, initialized in the folder you pick",
         language: "JavaScript",
         cmd: "npx",
-        args: &["express-generator", "--no-view", "{name}"],
-        create_own_dir: true,
+        args: &["express-generator", "--no-view", "."],
+        create_own_dir: false,
+        install_cmd: Some(("npm", &["install"])),
     },
     Framework {
         icon: "* ",
         name: "Flutter",
-        description: "Cross-platform mobile, web & desktop",
+        description: "Cross-platform mobile/web/desktop app, initialized in the folder you pick",
         language: "Dart",
         cmd: "flutter",
-        args: &["create", "{name}"],
-        create_own_dir: true,
+        args: &["create", "."],
+        create_own_dir: false,
+        install_cmd: None, // flutter create runs `pub get` itself
     },
     Framework {
         icon: "R ",
         name: "Rust  (Cargo)",
-        description: "New Rust binary crate",
+        description: "Rust binary crate, initialized in the folder you pick",
         language: "Rust",
         cmd: "cargo",
-        args: &["new", "{name}"],
-        create_own_dir: true,
+        args: &["init"],
+        create_own_dir: false,
+        install_cmd: Some(("cargo", &["fetch"])),
     },
     Framework {
         icon: ". ",
         name: ".NET Web API",
-        description: "ASP.NET Core minimal or controller API",
+        description: "ASP.NET Core web API, initialized in the folder you pick",
         language: "C#",
         cmd: "dotnet",
         args: &["new", "webapi", "-n", "{name}"],
-        create_own_dir: true,
+        create_own_dir: false,
+        install_cmd: Some(("dotnet", &["restore"])),
     },
     Framework {
         icon: "🐹",
         name: "Go  (module)",
-        description: "New Go module with go.mod initialized",
+        description: "Go module, go.mod initialized in the folder you pick",
         language: "Go",
         cmd: "go",
         args: &["mod", "init", "{name}"],
         create_own_dir: false,
+        install_cmd: Some(("go", &["mod", "tidy"])),
     },
     Framework {
         icon: "🅑 ",
         name: "Ballerina",
-        description: "New Ballerina service package",
+        description: "Ballerina package, initialized in the folder you pick",
         language: "Ballerina",
         cmd: "bal",
-        args: &["new", "{name}"],
-        create_own_dir: true,
+        args: &["new", "."],
+        create_own_dir: false,
+        install_cmd: None,
     },
     Framework {
         icon: "💧",
         name: "Elixir  (Mix)",
-        description: "New Elixir project with Mix",
+        description: "Elixir project, initialized in the folder you pick",
         language: "Elixir",
         cmd: "mix",
-        args: &["new", "{name}"],
-        create_own_dir: true,
+        args: &["new", "."],
+        create_own_dir: false,
+        install_cmd: Some(("mix", &["deps.get"])),
     },
     Framework {
         icon: "🍎",
         name: "Swift Package",
-        description: "New executable Swift package",
+        description: "Executable Swift package, initialized in the folder you pick",
         language: "Swift",
         cmd: "swift",
         args: &["package", "init", "--type", "executable"],
         create_own_dir: false,
+        install_cmd: Some(("swift", &["package", "resolve"])),
     },
     Framework {
         icon: "☕",
         name: "Java  (Maven)",
-        description: "Maven quickstart archetype",
+        description: "Maven quickstart archetype (creates a nested artifactId subfolder)",
         language: "Java",
         cmd: "mvn",
         args: &[
@@ -176,38 +198,53 @@ pub const FRAMEWORKS: &[Framework] = &[
             "-DinteractiveMode=false",
         ],
         create_own_dir: true,
+        install_cmd: None, // archetype:generate already resolves the archetype's own deps
     },
     Framework {
         icon: "P ",
         name: "Python  (venv)",
-        description: "Virtual environment for a Python project",
+        description: "Virtual environment created inside the folder you pick",
         language: "Python",
         cmd: "python",
-        args: &["-m", "venv", "{name}"],
-        create_own_dir: true,
+        args: &["-m", "venv", "venv"],
+        create_own_dir: false,
+        install_cmd: None, // fresh venv has no requirements.txt yet
     },
     Framework {
         icon: "🐍",
         name: "Python  (Poetry)",
-        description: "Poetry-managed Python package",
+        description: "Poetry-managed package, initialized in the folder you pick",
         language: "Python",
         cmd: "poetry",
-        args: &["new", "{name}"],
-        create_own_dir: true,
+        args: &["init", "--no-interaction"],
+        create_own_dir: false,
+        install_cmd: Some(("poetry", &["install", "--no-interaction", "--no-root"])),
     },
     Framework {
         icon: "🐘",
         name: "PHP  (Laravel)",
-        description: "Laravel web application via Composer",
+        description: "Laravel web application, installed into the folder you pick",
         language: "PHP",
         cmd: "composer",
-        args: &["create-project", "laravel/laravel", "{name}"],
-        create_own_dir: true,
+        args: &["create-project", "laravel/laravel", "."],
+        create_own_dir: false,
+        install_cmd: None, // composer create-project already installs deps itself
     },
 ];
 
 fn is_installed(cmd: &str) -> bool {
     crate::langscan::find_on_path(cmd).is_some()
+}
+
+/// Resolves a bare command name to its full path (with extension) found on PATH.
+/// This matters on Windows: tools like npm/npx/flutter are `.cmd`/`.bat` shims, and
+/// `Command::new("npm")` fails with "program not found" because Windows only resolves
+/// bare names to `.exe` automatically, not `.cmd`/`.bat`. Falls back to the bare name
+/// (e.g. on Unix, or if it isn't found — the spawn error will surface either way).
+fn resolve_cmd(cmd: &'static str) -> std::ffi::OsString {
+    crate::langscan::find_on_path(cmd)
+        .map(|p| p.into_os_string())
+        .unwrap_or_else(|| cmd.into())
 }
 pub fn available_frameworks() -> Vec<(usize, &'static Framework)> {
     FRAMEWORKS
@@ -467,12 +504,52 @@ pub fn scaffold_project(framework_idx: usize, project_path: &PathBuf) -> anyhow:
     println!("  Cmd    : {} {}", fw.cmd, resolved_args.join(" "));
     println!();
 
-    let status = std::process::Command::new(fw.cmd)
+    let status = match std::process::Command::new(resolve_cmd(fw.cmd))
         .args(&resolved_args)
         .current_dir(&run_dir)
-        .status()?;
+        .status()
+    {
+        Ok(s) => s,
+        Err(e) => {
+            println!();
+            println!("  Could not run '{}': {}", fw.cmd, e);
+            println!("  Make sure '{}' is installed and on PATH.", fw.cmd);
+            println!();
+            println!("  Press Enter to continue...");
+            let mut buf = String::new();
+            std::io::stdin().read_line(&mut buf).ok();
+            return Ok(());
+        }
+    };
 
     if status.success() {
+        if let Some((icmd, iargs)) = fw.install_cmd {
+            println!();
+            println!("  Installing dependencies ...");
+            println!("  Cmd    : {} {}", icmd, iargs.join(" "));
+            println!();
+
+            let install_status = std::process::Command::new(resolve_cmd(icmd))
+                .args(iargs)
+                .current_dir(project_path)
+                .status();
+
+            match install_status {
+                Ok(s) if s.success() => {
+                    println!("  Dependencies installed.");
+                }
+                Ok(s) => {
+                    println!(
+                        "  Dependency install exited with code {:?} (project files are still in place).",
+                        s.code()
+                    );
+                }
+                Err(e) => {
+                    println!("  Could not run '{}': {}", icmd, e);
+                }
+            }
+        }
+
         println!();
         println!("  Project '{}' created successfully!", project_name);
         println!("  Path: {}", project_path.display());
