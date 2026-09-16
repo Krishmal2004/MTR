@@ -24,6 +24,20 @@ Once installed, run it from anywhere:
 tui-runner
 ```
 
+## Uninstall
+
+**Windows** (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/Krishmal2004/MTR/main/tui-runner/uninstall.ps1 | iex
+```
+
+**macOS / Linux**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Krishmal2004/MTR/main/tui-runner/uninstall.sh | bash
+```
+
+This removes the installed binary (and, on Windows, the PATH entry the installer added).
+
 ### Build from source
 
 ```bash
