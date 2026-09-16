@@ -25,12 +25,87 @@ jobs:
         run: cargo build --release
         working-directory: tui-runner
 
-      - name: Copy binary to root
-        run: Copy-Item "tui-runner\target\release\tui-runner.exe" "tui-runner.exe"
+      - name: Rename binary
+        run: Copy-Item "tui-runner\target\release\tui-runner.exe" "tui-runner-windows-x86_64.exe"
 
-      - name: Upload to GitHub Release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-runner-windows-x86_64
+          path: tui-runner-windows-x86_64.exe
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Release Binary
+        run: cargo build --release
+        working-directory: tui-runner
+
+      - name: Rename binary
+        run: cp tui-runner/target/release/tui-runner tui-runner-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-runner-linux-x86_64
+          path: tui-runner-linux-x86_64
+
+  build-macos:
+    name: Build macOS Binary (universal)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Build Intel binary
+        run: cargo build --release --target x86_64-apple-darwin
+        working-directory: tui-runner
+
+      - name: Build Apple Silicon binary
+        run: cargo build --release --target aarch64-apple-darwin
+        working-directory: tui-runner
+
+      - name: Combine into universal binary
+        run: |
+          lipo -create -output tui-runner-macos-universal \
+            tui-runner/target/x86_64-apple-darwin/release/tui-runner \
+            tui-runner/target/aarch64-apple-darwin/release/tui-runner
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-runner-macos-universal
+          path: tui-runner-macos-universal
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: tui-runner.exe
+          files: |
+            dist/tui-runner-windows-x86_64.exe
+            dist/tui-runner-linux-x86_64
+            dist/tui-runner-macos-universal
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
