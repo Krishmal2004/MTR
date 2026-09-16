@@ -20,6 +20,9 @@ pub struct Framework {
     pub language: &'static str,
     pub cmd: &'static str,
     pub args: &'static [&'static str],
+    /// true  = the command itself creates the "{name}" subfolder (run from the parent dir)
+    /// false = the target folder is created first, and the command runs inside it
+    pub create_own_dir: bool,
 }
 
 pub const FRAMEWORKS: &[Framework] = &[
@@ -30,6 +33,7 @@ pub const FRAMEWORKS: &[Framework] = &[
         language: "JavaScript / TypeScript",
         cmd: "npm",
         args: &["create", "vite@latest", "{name}", "--", "--template", "react"],
+        create_own_dir: true,
     },
     Framework {
         icon: "▲ ",
@@ -38,6 +42,7 @@ pub const FRAMEWORKS: &[Framework] = &[
         language: "JavaScript / TypeScript",
         cmd: "npx",
         args: &["create-next-app@latest", "{name}", "--yes"],
+        create_own_dir: true,
     },
     Framework {
         icon: "◈ ",
@@ -46,6 +51,7 @@ pub const FRAMEWORKS: &[Framework] = &[
         language: "JavaScript / TypeScript",
         cmd: "npm",
         args: &["create", "vite@latest", "{name}", "--", "--template", "vue"],
+        create_own_dir: true,
     },
     Framework {
         icon: "A ",
@@ -54,6 +60,7 @@ pub const FRAMEWORKS: &[Framework] = &[
         language: "TypeScript",
         cmd: "npx",
         args: &["-p", "@angular/cli", "ng", "new", "{name}", "--defaults"],
+        create_own_dir: true,
     },
     Framework {
         icon: "S ",
@@ -62,30 +69,25 @@ pub const FRAMEWORKS: &[Framework] = &[
         language: "JavaScript / TypeScript",
         cmd: "npm",
         args: &["create", "svelte@latest", "{name}"],
+        create_own_dir: true,
     },
     Framework {
-        icon: "* ",
-        name: "Flutter",
-        description: "Cross-platform mobile, web & desktop",
-        language: "Dart",
-        cmd: "flutter",
-        args: &["create", "{name}"],
+        icon: "🦕",
+        name: "Deno",
+        description: "Secure TypeScript/JavaScript runtime project",
+        language: "TypeScript / JavaScript",
+        cmd: "deno",
+        args: &["init", "{name}"],
+        create_own_dir: true,
     },
     Framework {
-        icon: "R ",
-        name: "Rust  (Cargo)",
-        description: "New Rust binary crate",
-        language: "Rust",
-        cmd: "cargo",
-        args: &["new", "{name}"],
-    },
-    Framework {
-        icon: ". ",
-        name: ".NET Web API",
-        description: "ASP.NET Core minimal or controller API",
-        language: "C#",
-        cmd: "dotnet",
-        args: &["new", "webapi", "-n", "{name}"],
+        icon: "🥟",
+        name: "Bun",
+        description: "Blazing-fast all-in-one JS/TS runtime project",
+        language: "TypeScript / JavaScript",
+        cmd: "bun",
+        args: &["init", "-y"],
+        create_own_dir: false,
     },
     Framework {
         icon: "N ",
@@ -94,24 +96,118 @@ pub const FRAMEWORKS: &[Framework] = &[
         language: "JavaScript",
         cmd: "npx",
         args: &["express-generator", "--no-view", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "* ",
+        name: "Flutter",
+        description: "Cross-platform mobile, web & desktop",
+        language: "Dart",
+        cmd: "flutter",
+        args: &["create", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "R ",
+        name: "Rust  (Cargo)",
+        description: "New Rust binary crate",
+        language: "Rust",
+        cmd: "cargo",
+        args: &["new", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: ". ",
+        name: ".NET Web API",
+        description: "ASP.NET Core minimal or controller API",
+        language: "C#",
+        cmd: "dotnet",
+        args: &["new", "webapi", "-n", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "🐹",
+        name: "Go  (module)",
+        description: "New Go module with go.mod initialized",
+        language: "Go",
+        cmd: "go",
+        args: &["mod", "init", "{name}"],
+        create_own_dir: false,
+    },
+    Framework {
+        icon: "🅑 ",
+        name: "Ballerina",
+        description: "New Ballerina service package",
+        language: "Ballerina",
+        cmd: "bal",
+        args: &["new", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "💧",
+        name: "Elixir  (Mix)",
+        description: "New Elixir project with Mix",
+        language: "Elixir",
+        cmd: "mix",
+        args: &["new", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "🍎",
+        name: "Swift Package",
+        description: "New executable Swift package",
+        language: "Swift",
+        cmd: "swift",
+        args: &["package", "init", "--type", "executable"],
+        create_own_dir: false,
+    },
+    Framework {
+        icon: "☕",
+        name: "Java  (Maven)",
+        description: "Maven quickstart archetype",
+        language: "Java",
+        cmd: "mvn",
+        args: &[
+            "archetype:generate",
+            "-DgroupId=com.example",
+            "-DartifactId={name}",
+            "-DarchetypeArtifactId=maven-archetype-quickstart",
+            "-DarchetypeVersion=1.4",
+            "-DinteractiveMode=false",
+        ],
+        create_own_dir: true,
     },
     Framework {
         icon: "P ",
-        name: "Python  (FastAPI)",
-        description: "Modern async Python web API",
+        name: "Python  (venv)",
+        description: "Virtual environment for a Python project",
         language: "Python",
         cmd: "python",
         args: &["-m", "venv", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "🐍",
+        name: "Python  (Poetry)",
+        description: "Poetry-managed Python package",
+        language: "Python",
+        cmd: "poetry",
+        args: &["new", "{name}"],
+        create_own_dir: true,
+    },
+    Framework {
+        icon: "🐘",
+        name: "PHP  (Laravel)",
+        description: "Laravel web application via Composer",
+        language: "PHP",
+        cmd: "composer",
+        args: &["create-project", "laravel/laravel", "{name}"],
+        create_own_dir: true,
     },
 ];
 
 fn is_installed(cmd: &str) -> bool {
-    std::process::Command::new(cmd)
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok()
+    crate::langscan::find_on_path(cmd).is_some()
 }
 pub fn available_frameworks() -> Vec<(usize, &'static Framework)> {
     FRAMEWORKS
@@ -139,11 +235,19 @@ pub fn select_framework() -> Option<usize> {
         println!();
         println!("  No supported frameworks detected on this machine.");
         println!("  Install one or more of the following tools first:");
-        println!("    npm / node   → React, Next.js, Vue, Angular, SvelteKit, Node.js");
+        println!("    npm / node   → React, Next.js, Vue, Angular, SvelteKit, Express");
+        println!("    deno / bun   → Deno, Bun");
         println!("    flutter      → Flutter");
         println!("    cargo        → Rust");
         println!("    dotnet       → .NET Web API");
-        println!("    python       → Python");
+        println!("    go           → Go module");
+        println!("    bal          → Ballerina");
+        println!("    mix          → Elixir");
+        println!("    swift        → Swift Package");
+        println!("    mvn          → Java (Maven)");
+        println!("    python       → Python (venv)");
+        println!("    poetry       → Python (Poetry)");
+        println!("    composer     → PHP (Laravel)");
         println!();
         println!("  Press Enter to go back...");
         let mut buf = String::new();
@@ -349,16 +453,23 @@ pub fn scaffold_project(framework_idx: usize, project_path: &PathBuf) -> anyhow:
         .map(|a| a.replace("{name}", &project_name))
         .collect();
 
+    let run_dir = if fw.create_own_dir {
+        parent.clone()
+    } else {
+        std::fs::create_dir_all(project_path)?;
+        project_path.clone()
+    };
+
     println!();
     println!("  Scaffolding {} project ...", fw.name);
     println!("  Name   : {}", project_name);
-    println!("  Folder : {}", parent.display());
+    println!("  Folder : {}", run_dir.display());
     println!("  Cmd    : {} {}", fw.cmd, resolved_args.join(" "));
     println!();
 
     let status = std::process::Command::new(fw.cmd)
         .args(&resolved_args)
-        .current_dir(&parent)
+        .current_dir(&run_dir)
         .status()?;
 
     if status.success() {

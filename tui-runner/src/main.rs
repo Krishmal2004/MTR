@@ -4,13 +4,26 @@ mod engine;
 mod filebrowser;
 mod header;
 mod home;
+mod langscan;
 mod port_cleanup;
 mod project_creator;
 mod ui;
 mod wizard;
 
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
+
+fn downloads_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let home = env::var_os("USERPROFILE");
+    #[cfg(not(windows))]
+    let home = env::var_os("HOME");
+
+    home.map(PathBuf::from)
+        .map(|p| p.join("Downloads"))
+        .filter(|p| p.is_dir())
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -27,15 +40,21 @@ async fn main() -> anyhow::Result<()> {
 
         match choice {
             home::HomeChoice::CreateProject => {
+                let detected = langscan::scan_languages();
+                match langscan::show_language_report(&detected) {
+                    Some(true) => {}
+                    _ => continue,
+                }
+
                 let framework_idx = match project_creator::select_framework() {
                     Some(idx) => idx,
-                    None => continue, 
+                    None => continue,
                 };
 
-                let cwd = env::current_dir()?;
-                let project_path = match filebrowser::browse_for_directory(&cwd) {
+                let start_dir = downloads_dir().unwrap_or(env::current_dir()?);
+                let project_path = match filebrowser::browse_for_directory(&start_dir) {
                     Some(path) => path,
-                    None => continue, 
+                    None => continue,
                 };
 
                 project_creator::scaffold_project(framework_idx, &project_path)?;
